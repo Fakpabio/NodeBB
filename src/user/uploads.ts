@@ -27,7 +27,7 @@ const _validatePath = async (relativePaths: string[]) => {
 };
 
 
-export default function (User: { associateUpload: (uid: string, relativePath: string[] & Float64Array) => Promise<void>;
+export = function (User: { associateUpload: (uid: string, relativePath: string[] & Float64Array) => Promise<void>;
     deleteUpload: (callerUid: string, uid: string, uploadNames: string[]) => Promise<void>;
     isAdminOrGlobalMod: (arg0: string) => boolean;
     collateUploads: (uid: string, archive: { file: (arg0: string, arg1: { name: string; }) => void; })

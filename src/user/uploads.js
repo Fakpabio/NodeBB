@@ -11,7 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-Object.defineProperty(exports, "__esModule", { value: true });
 const path_1 = __importDefault(require("path"));
 const nconf_1 = __importDefault(require("nconf"));
 const winston_1 = __importDefault(require("winston"));
@@ -35,7 +34,7 @@ const _validatePath = (relativePaths) => __awaiter(void 0, void 0, void 0, funct
         throw new Error('[[error:invalid-path]]');
     }
 });
-function default_1(User) {
+module.exports = function (User) {
     User.associateUpload = (uid, relativePath) => __awaiter(this, void 0, void 0, function* () {
         yield _validatePath(relativePath);
         yield Promise.all([
@@ -112,5 +111,4 @@ function default_1(User) {
         });
     };
     return Promise.resolve();
-}
-exports.default = default_1;
+};
