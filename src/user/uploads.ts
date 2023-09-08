@@ -1,17 +1,23 @@
+import path = require('path');
+import nconf = require('nconf');
+import winston = require('winston');
+import crypto = require('crypto');
 
-import path from 'path';
-import nconf from 'nconf';
-import winston from 'winston';
-import crypto from 'crypto';
+import db = require('../database');
+import posts = require('../posts');
+import file = require('../file');
+import batch = require('../batch');
 
-import db from '../database';
-import posts from '../posts';
-import file from '../file';
-import batch from '../batch';
+interface User {
+    associateUpload: (uid: string, relativePath: crypto.BinaryLike & string[]) => Promise<void>;
+    deleteUpload: (callerUid: string, uid: string, uploadNames: string[]) => Promise<void>;
+    isAdminOrGlobalMod: (arg0: string) => boolean;
+    collateUploads: (uid: string, archive: { file: (arg0: string, arg1: { name: string }) => void }) => Promise<void>;
+}
 
 const md5 = (filename: crypto.BinaryLike) => crypto.createHash('md5').update(filename).digest('hex');
 const _getFullPath = (relativePath: string) => path.resolve(nconf.get('upload_path') as string, relativePath);
-const _validatePath = async (relativePaths: string[]) => {
+const _validatePath = async (relativePaths: string | string[]) => {
     if (typeof relativePaths === 'string') {
         relativePaths = [relativePaths];
     } else if (!Array.isArray(relativePaths)) {
@@ -26,20 +32,19 @@ const _validatePath = async (relativePaths: string[]) => {
     }
 };
 
-
-export = function (User: { associateUpload: (uid: string, relativePath: string[] & Float64Array) => Promise<void>;
-    deleteUpload: (callerUid: string, uid: string, uploadNames: string[]) => Promise<void>;
-    isAdminOrGlobalMod: (arg0: string) => boolean;
-    collateUploads: (uid: string, archive: { file: (arg0: string, arg1: { name: string; }) => void; })
-    => Promise<void>; }):Promise<void> {
+module.exports = function (User: User) {
     User.associateUpload = async (uid, relativePath) => {
         await _validatePath(relativePath);
         await Promise.all([
             // The next line calls a function in a module that has not been updated to TS yet
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+            /* eslint-disable-next-line
+            @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-call */
             db.sortedSetAdd(`uid:${uid}:uploads`, Date.now(), relativePath),
             // The next line calls a function in a module that has not been updated to TS yet
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+            /* eslint-disable-next-line
+            @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-call */
             db.setObjectField(`upload:${md5(relativePath)}`, 'uid', uid),
         ]);
     };
@@ -55,16 +60,19 @@ export = function (User: { associateUpload: (uid: string, relativePath: string[]
 
         const [isUsersUpload, isAdminOrGlobalMod]: boolean[] = await Promise.all([
             // The next line calls a function in a module that has not been updated to TS yet
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+            /* eslint-disable-next-line
+            @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-call */
             db.isSortedSetMembers(`uid:${callerUid}:uploads`, uploadNames),
             User.isAdminOrGlobalMod(callerUid),
         ]) as boolean[];
+
         if (!isAdminOrGlobalMod && !isUsersUpload) {
             throw new Error('[[error:no-privileges]]');
         }
 
         await batch.processArray(uploadNames, async (uploadNames: string[]) => {
-            const fullPaths: string[] = uploadNames.map((path: string) => _getFullPath(path));
+            const fullPaths: string[] = uploadNames.map(path => _getFullPath(path));
 
             await Promise.all(fullPaths.map(async (fullPath, idx) => {
                 winston.verbose(`[user/deleteUpload] Deleting ${uploadNames[idx]}`);
@@ -74,26 +82,31 @@ export = function (User: { associateUpload: (uid: string, relativePath: string[]
                 ]);
                 await Promise.all([
                     // The next line calls a function in a module that has not been updated to TS yet
-                    /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                    /* eslint-disable-next-line
+                    @typescript-eslint/no-unsafe-member-access,
                     @typescript-eslint/no-unsafe-call */
                     db.sortedSetRemove(`uid:${uid}:uploads`, uploadNames[idx]),
                     // The next line calls a function in a module that has not been updated to TS yet
-                    /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
-                     @typescript-eslint/no-unsafe-call */
+                    /* eslint-disable-next-line
+                    @typescript-eslint/no-unsafe-member-access,
+                    @typescript-eslint/no-unsafe-call */
                     db.delete(`upload:${md5(uploadNames[idx])}`),
                 ]);
             }));
-
-            // Dissociate the upload from pids, if any
             // The next line calls a function in a module that has not been updated to TS yet
-            /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
-             @typescript-eslint/no-unsafe-call */
-            const pids: string[] = await db.getSortedSetsMembers(uploadNames.map(relativePath => `upload:${md5(relativePath)}:pids`)) as string[];
+            /* eslint-disable-next-line
+            @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-call */
+            const pids: string[] = await db.getSortedSetsMembers(
+                uploadNames.map(relativePath => `upload:${md5(relativePath)}:pids`)
+            ) as string[];
+
             await Promise.all(pids.map(async idx => Promise.all(
                 // The next line calls a function in a module that has not been updated to TS yet
-                /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                /* eslint-disable-next-line
+                @typescript-eslint/no-unsafe-member-access,
                 @typescript-eslint/no-unsafe-call */
-                pids.map(pid => posts.uploads.dissociate(pid, uploadNames[idx]) as string[])
+                pids.map(pid => (posts.uploads.dissociate(pid, uploadNames[idx]) as string[]))
             )));
         }, { batch: 50 });
     };
@@ -110,4 +123,4 @@ export = function (User: { associateUpload: (uid: string, relativePath: string[]
         }, { batch: 100 });
     };
     return Promise.resolve();
-}
+};

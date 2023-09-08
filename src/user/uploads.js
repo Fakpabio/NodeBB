@@ -8,19 +8,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-const path_1 = __importDefault(require("path"));
-const nconf_1 = __importDefault(require("nconf"));
-const winston_1 = __importDefault(require("winston"));
-const crypto_1 = __importDefault(require("crypto"));
-const database_1 = __importDefault(require("../database"));
-const posts_1 = __importDefault(require("../posts"));
-const file_1 = __importDefault(require("../file"));
-const batch_1 = __importDefault(require("../batch"));
-const md5 = (filename) => crypto_1.default.createHash('md5').update(filename).digest('hex');
-const _getFullPath = (relativePath) => path_1.default.resolve(nconf_1.default.get('upload_path'), relativePath);
+Object.defineProperty(exports, "__esModule", { value: true });
+const path = require("path");
+const nconf = require("nconf");
+const winston = require("winston");
+const crypto = require("crypto");
+const db = require("../database");
+const posts = require("../posts");
+const file = require("../file");
+const batch = require("../batch");
+const md5 = (filename) => crypto.createHash('md5').update(filename).digest('hex');
+const _getFullPath = (relativePath) => path.resolve(nconf.get('upload_path'), relativePath);
 const _validatePath = (relativePaths) => __awaiter(void 0, void 0, void 0, function* () {
     if (typeof relativePaths === 'string') {
         relativePaths = [relativePaths];
@@ -29,8 +27,8 @@ const _validatePath = (relativePaths) => __awaiter(void 0, void 0, void 0, funct
         throw new Error(`[[error:wrong-parameter-type, relativePaths, ${typeof relativePaths}, array]]`);
     }
     const fullPaths = relativePaths.map(path => _getFullPath(path));
-    const exists = yield Promise.all(fullPaths.map((fullPath) => __awaiter(void 0, void 0, void 0, function* () { return file_1.default.exists(fullPath); })));
-    if (!fullPaths.every(fullPath => fullPath.startsWith(nconf_1.default.get('upload_path'))) || !exists.every(Boolean)) {
+    const exists = yield Promise.all(fullPaths.map((fullPath) => __awaiter(void 0, void 0, void 0, function* () { return file.exists(fullPath); })));
+    if (!fullPaths.every(fullPath => fullPath.startsWith(nconf.get('upload_path'))) || !exists.every(Boolean)) {
         throw new Error('[[error:invalid-path]]');
     }
 });
@@ -39,11 +37,15 @@ module.exports = function (User) {
         yield _validatePath(relativePath);
         yield Promise.all([
             // The next line calls a function in a module that has not been updated to TS yet
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-            database_1.default.sortedSetAdd(`uid:${uid}:uploads`, Date.now(), relativePath),
+            /* eslint-disable-next-line
+            @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-call */
+            db.sortedSetAdd(`uid:${uid}:uploads`, Date.now(), relativePath),
             // The next line calls a function in a module that has not been updated to TS yet
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-            database_1.default.setObjectField(`upload:${md5(relativePath)}`, 'uid', uid),
+            /* eslint-disable-next-line
+            @typescript-eslint/no-unsafe-member-access,
+            @typescript-eslint/no-unsafe-call */
+            db.setObjectField(`upload:${md5(relativePath)}`, 'uid', uid),
         ]);
     });
     User.deleteUpload = function (callerUid, uid, uploadNames) {
@@ -57,53 +59,58 @@ module.exports = function (User) {
             yield _validatePath(uploadNames);
             const [isUsersUpload, isAdminOrGlobalMod] = yield Promise.all([
                 // The next line calls a function in a module that has not been updated to TS yet
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-                database_1.default.isSortedSetMembers(`uid:${callerUid}:uploads`, uploadNames),
+                /* eslint-disable-next-line
+                @typescript-eslint/no-unsafe-member-access,
+                @typescript-eslint/no-unsafe-call */
+                db.isSortedSetMembers(`uid:${callerUid}:uploads`, uploadNames),
                 User.isAdminOrGlobalMod(callerUid),
             ]);
             if (!isAdminOrGlobalMod && !isUsersUpload) {
                 throw new Error('[[error:no-privileges]]');
             }
-            yield batch_1.default.processArray(uploadNames, (uploadNames) => __awaiter(this, void 0, void 0, function* () {
-                const fullPaths = uploadNames.map((path) => _getFullPath(path));
+            yield batch.processArray(uploadNames, (uploadNames) => __awaiter(this, void 0, void 0, function* () {
+                const fullPaths = uploadNames.map(path => _getFullPath(path));
                 yield Promise.all(fullPaths.map((fullPath, idx) => __awaiter(this, void 0, void 0, function* () {
-                    winston_1.default.verbose(`[user/deleteUpload] Deleting ${uploadNames[idx]}`);
+                    winston.verbose(`[user/deleteUpload] Deleting ${uploadNames[idx]}`);
                     yield Promise.all([
-                        file_1.default.delete(fullPath),
-                        file_1.default.delete(file_1.default.appendToFileName(fullPath, '-resized')),
+                        file.delete(fullPath),
+                        file.delete(file.appendToFileName(fullPath, '-resized')),
                     ]);
                     yield Promise.all([
                         // The next line calls a function in a module that has not been updated to TS yet
-                        /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                        /* eslint-disable-next-line
+                        @typescript-eslint/no-unsafe-member-access,
                         @typescript-eslint/no-unsafe-call */
-                        database_1.default.sortedSetRemove(`uid:${uid}:uploads`, uploadNames[idx]),
+                        db.sortedSetRemove(`uid:${uid}:uploads`, uploadNames[idx]),
                         // The next line calls a function in a module that has not been updated to TS yet
-                        /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
-                         @typescript-eslint/no-unsafe-call */
-                        database_1.default.delete(`upload:${md5(uploadNames[idx])}`),
+                        /* eslint-disable-next-line
+                        @typescript-eslint/no-unsafe-member-access,
+                        @typescript-eslint/no-unsafe-call */
+                        db.delete(`upload:${md5(uploadNames[idx])}`),
                     ]);
                 })));
-                // Dissociate the upload from pids, if any
                 // The next line calls a function in a module that has not been updated to TS yet
-                /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
-                 @typescript-eslint/no-unsafe-call */
-                const pids = yield database_1.default.getSortedSetsMembers(uploadNames.map(relativePath => `upload:${md5(relativePath)}:pids`));
+                /* eslint-disable-next-line
+                @typescript-eslint/no-unsafe-member-access,
+                @typescript-eslint/no-unsafe-call */
+                const pids = yield db.getSortedSetsMembers(uploadNames.map(relativePath => `upload:${md5(relativePath)}:pids`));
                 yield Promise.all(pids.map((idx) => __awaiter(this, void 0, void 0, function* () {
                     return Promise.all(
                     // The next line calls a function in a module that has not been updated to TS yet
-                    /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,
+                    /* eslint-disable-next-line
+                    @typescript-eslint/no-unsafe-member-access,
                     @typescript-eslint/no-unsafe-call */
-                    pids.map(pid => posts_1.default.uploads.dissociate(pid, uploadNames[idx])));
+                    pids.map(pid => posts.uploads.dissociate(pid, uploadNames[idx])));
                 })));
             }), { batch: 50 });
         });
     };
     User.collateUploads = function (uid, archive) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield batch_1.default.processSortedSet(`uid:${uid}:uploads`, (files, next) => {
+            yield batch.processSortedSet(`uid:${uid}:uploads`, (files, next) => {
                 files.forEach((file) => {
                     archive.file(_getFullPath(file), {
-                        name: path_1.default.basename(file),
+                        name: path.basename(file),
                     });
                 });
                 setImmediate(next);
